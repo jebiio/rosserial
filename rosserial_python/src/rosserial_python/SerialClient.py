@@ -98,13 +98,14 @@ class Publisher:
         # find message type
         package, message = topic_info.message_type.split('/')
         self.message = load_message(package, message)
-        if self.message._md5sum == topic_info.md5sum:
+        if self.message._md5sum == topic_info.md5sum: # 이부분 필요없음.
             self.publisher = rospy.Publisher(self.topic, self.message, queue_size=10)
         else:
             raise Exception('Checksum does not match: ' + self.message._md5sum + ',' + topic_info.md5sum)
 
     def handlePacket(self, data):
         """ Forward message to ROS network. """
+        # data가 serial bytes data로 이것을 FromCooperation.packet으로 변환하기(복사하기)
         m = self.message()
         m.deserialize(data)
         self.publisher.publish(m)
@@ -123,15 +124,19 @@ class Subscriber:
         # find message type
         package, message = topic_info.message_type.split('/')
         self.message = load_message(package, message)
-        if self.message._md5sum == topic_info.md5sum:
+        # topic 이름과 msg를 그냥 정의하면 어떨까??
+        if self.message._md5sum == topic_info.md5sum: # checksum 이 부분 필요없음. 
+            # 직접 topic과 msg를 입력하면 될듯...
             self.subscriber = rospy.Subscriber(self.topic, self.message, self.callback)
         else:
             raise Exception('Checksum does not match: ' + self.message._md5sum + ',' + topic_info.md5sum)
 
     def callback(self, msg):
+        # serial 장치로 전송하기
         """ Forward message to serial device. """
         data_buffer = io.BytesIO()
         msg.serialize(data_buffer)
+        # 여기에 msg에서 packet 부분을 변환하기 
         self.parent.send(self.id, data_buffer.getvalue())
 
     def unregister(self):
@@ -476,6 +481,7 @@ class SerialClient(object):
                         time.sleep(0.001)
                         continue
 
+                # 읽어온거 header 확인하기... 
                 # Find sync flag.
                 flag = [0, 0]
                 read_step = 'syncflag'
@@ -735,13 +741,13 @@ class SerialClient(object):
         elif msg.level == Log.FATAL:
             rospy.logfatal(msg.msg)
 
-    def send(self, topic, msg):
+    def send(self, topic, msg): # serial에 전송할 data를 queue에 넣기 
         """
         Queues data to be written to the serial port.
         """
         self.write_queue.put((topic, msg))
 
-    def _write(self, data):
+    def _write(self, data):  # 실제로 serial에 쓰기
         """
         Writes raw data over the serial port. Assumes the data is formatting as a packet. http://wiki.ros.org/rosserial/Overview/Protocol
         """
@@ -749,7 +755,7 @@ class SerialClient(object):
             self.port.write(data)
             self.last_write = rospy.Time.now()
 
-    def _send(self, topic, msg_bytes):
+    def _send(self, topic, msg_bytes): # topic msg를 serial에 쓰기(_write()사용)
         """
         Send a message on a particular topic to the device.
         """
@@ -774,6 +780,7 @@ class SerialClient(object):
         """
         Main loop for the thread that processes outgoing data to write to the serial port.
         """
+        # main loop으로 serial에 실제로 쓰기 작업
         while not rospy.is_shutdown():
             if self.write_queue.empty():
                 time.sleep(0.01)
