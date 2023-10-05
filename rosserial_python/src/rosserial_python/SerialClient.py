@@ -142,7 +142,7 @@ class Subscriber:
     def unregister(self):
         rospy.loginfo("Removing subscriber: %s", self.topic)
         self.subscriber.unregister()
-
+'''
 class ServiceServer:
     """
         ServiceServer responds to requests from ROS.
@@ -215,7 +215,7 @@ class ServiceClient:
         data_buffer = io.BytesIO()
         resp.serialize(data_buffer)
         self.parent.send(self.id, data_buffer.getvalue())
-
+'''
 class RosSerialServer:
     """
         RosSerialServer waits for a socket connection then passes itself, forked as a
@@ -395,17 +395,17 @@ class SerialClient(object):
         self.callbacks[TopicInfo.ID_PUBLISHER] = self.setupPublisher
         self.callbacks[TopicInfo.ID_SUBSCRIBER] = self.setupSubscriber
         # service client/servers have 2 creation endpoints (a publisher and a subscriber)
-        self.callbacks[TopicInfo.ID_SERVICE_SERVER+TopicInfo.ID_PUBLISHER] = self.setupServiceServerPublisher
-        self.callbacks[TopicInfo.ID_SERVICE_SERVER+TopicInfo.ID_SUBSCRIBER] = self.setupServiceServerSubscriber
-        self.callbacks[TopicInfo.ID_SERVICE_CLIENT+TopicInfo.ID_PUBLISHER] = self.setupServiceClientPublisher
-        self.callbacks[TopicInfo.ID_SERVICE_CLIENT+TopicInfo.ID_SUBSCRIBER] = self.setupServiceClientSubscriber
+        # self.callbacks[TopicInfo.ID_SERVICE_SERVER+TopicInfo.ID_PUBLISHER] = self.setupServiceServerPublisher
+        # self.callbacks[TopicInfo.ID_SERVICE_SERVER+TopicInfo.ID_SUBSCRIBER] = self.setupServiceServerSubscriber
+        # self.callbacks[TopicInfo.ID_SERVICE_CLIENT+TopicInfo.ID_PUBLISHER] = self.setupServiceClientPublisher
+        # self.callbacks[TopicInfo.ID_SERVICE_CLIENT+TopicInfo.ID_SUBSCRIBER] = self.setupServiceClientSubscriber
         # custom endpoints
-        self.callbacks[TopicInfo.ID_PARAMETER_REQUEST] = self.handleParameterRequest
-        self.callbacks[TopicInfo.ID_LOG] = self.handleLoggingRequest
-        self.callbacks[TopicInfo.ID_TIME] = self.handleTimeRequest
+        # self.callbacks[TopicInfo.ID_PARAMETER_REQUEST] = self.handleParameterRequest
+        # self.callbacks[TopicInfo.ID_LOG] = self.handleLoggingRequest
+        # self.callbacks[TopicInfo.ID_TIME] = self.handleTimeRequest
 
         rospy.sleep(2.0)
-        self.requestTopics()
+        #self.requestTopics()
         self.lastsync = rospy.Time.now()
 
     def requestTopics(self):
@@ -450,7 +450,7 @@ class SerialClient(object):
             raise IOError("Serial Port read failure: %s" % e)
 
     def run(self):
-        """ Forward recieved messages to appropriate publisher. """
+        """ Forward received messages to appropriate publisher. """
 
         # Launch write thread.
         if self.write_thread is None:
@@ -462,6 +462,7 @@ class SerialClient(object):
         data = ''
         read_step = None
         while self.write_thread.is_alive() and not rospy.is_shutdown():
+            '''
             if (rospy.Time.now() - self.lastsync).to_sec() > (self.timeout * 3):
                 if self.synced:
                     rospy.logerr("Lost sync with device, restarting...")
@@ -471,7 +472,7 @@ class SerialClient(object):
                 self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_NO_SYNC)
                 self.requestTopics()
                 self.lastsync = rospy.Time.now()
-
+            '''
             # This try-block is here because we make multiple calls to read(). Any one of them can throw
             # an IOError if there's a serial problem or timeout. In that scenario, a single handler at the
             # bottom attempts to reconfigure the topics.
@@ -493,7 +494,7 @@ class SerialClient(object):
                 read_step = 'protocol'
                 flag[1] = self.tryRead(1)
                 if flag[1] != self.protocol_ver:
-                    self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_MISMATCHED_PROTOCOL)
+                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_MISMATCHED_PROTOCOL)
                     rospy.logerr("Mismatched protocol version in packet (%s): lost sync or rosserial_python is from different ros release than the rosserial client" % repr(flag[1]))
                     protocol_ver_msgs = {
                             self.protocol_ver1: 'Rev 0 (rosserial 0.4 and earlier)',
@@ -527,7 +528,7 @@ class SerialClient(object):
                 try:
                     msg = self.tryRead(msg_length)
                 except IOError:
-                    self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
+                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
                     rospy.loginfo("Packet Failed :  Failed to read msg data")
                     rospy.loginfo("expected msg length is %d", msg_length)
                     raise
@@ -542,10 +543,10 @@ class SerialClient(object):
                     self.synced = True
                     self.lastsync_success = rospy.Time.now()
                     try:
-                        self.callbacks[topic_id](msg)
+                        #self.callbacks[topic_id](msg) 여기서 읽은 data를 publish하기!!!!
                     except KeyError:
                         rospy.logerr("Tried to publish before configured, topic id %d" % topic_id)
-                        self.requestTopics()
+                        #self.requestTopics()
                     time.sleep(0.001)
                 else:
                     rospy.loginfo("wrong checksum for topic id and msg")
@@ -559,7 +560,7 @@ class SerialClient(object):
                     self.port.flushInput()
                 with self.write_lock:
                     self.port.flushOutput()
-                self.requestTopics()
+                #self.requestTopics()
         self.write_thread.join()
 
     def setPublishSize(self, size):
@@ -575,12 +576,13 @@ class SerialClient(object):
     def setupPublisher(self, data):
         """ Register a new publisher. """
         try:
-            msg = TopicInfo()
-            msg.deserialize(data)
+            msg = FromCooperation()
+            msg.packet = data
+            # msg.deserialize(data)
             pub = Publisher(msg)
             self.publishers[msg.topic_id] = pub
             self.callbacks[msg.topic_id] = pub.handlePacket
-            self.setPublishSize(msg.buffer_size)
+            self.setPublishSize(msg.length)
             rospy.loginfo("Setup publisher on %s [%s]" % (msg.topic_name, msg.message_type) )
         except Exception as e:
             rospy.logerr("Creation of publisher failed: %s", e)
@@ -588,12 +590,12 @@ class SerialClient(object):
     def setupSubscriber(self, data):
         """ Register a new subscriber. """
         try:
-            msg = TopicInfo()
+            msg = ToCooperation() #msg = TopicInfo()
             msg.deserialize(data)
             if not msg.topic_name in list(self.subscribers.keys()):
                 sub = Subscriber(msg, self)
                 self.subscribers[msg.topic_name] = sub
-                self.setSubscribeSize(msg.buffer_size)
+                self.setSubscribeSize(msg.length)
                 rospy.loginfo("Setup subscriber on %s [%s]" % (msg.topic_name, msg.message_type) )
             elif msg.message_type != self.subscribers[msg.topic_name].message._type:
                 old_message_type = self.subscribers[msg.topic_name].message._type
@@ -604,7 +606,7 @@ class SerialClient(object):
                 rospy.loginfo("Change the message type of subscriber on %s from [%s] to [%s]" % (msg.topic_name, old_message_type, msg.message_type) )
         except Exception as e:
             rospy.logerr("Creation of subscriber failed: %s", e)
-
+'''
     def setupServiceServerPublisher(self, data):
         """ Register a new service server. """
         try:
@@ -740,7 +742,7 @@ class SerialClient(object):
             rospy.logerr(msg.msg)
         elif msg.level == Log.FATAL:
             rospy.logfatal(msg.msg)
-
+'''
     def send(self, topic, msg): # serial에 전송할 data를 queue에 넣기 
         """
         Queues data to be written to the serial port.
@@ -788,10 +790,10 @@ class SerialClient(object):
                 data = self.write_queue.get()
                 while True:
                     try:
-                        if isinstance(data, tuple):
+                        if isinstance(data, tuple): # topic과 msg를 serial에 write하기
                             topic, msg = data
                             self._send(topic, msg)
-                        elif isinstance(data, bytes):
+                        elif isinstance(data, bytes): # data를 serial에 write
                             self._write(data)
                         else:
                             rospy.logerr("Trying to write invalid data type: %s" % type(data))
@@ -803,7 +805,7 @@ class SerialClient(object):
                         rospy.logerr('Write thread exception: %s' % exc)
                         break
 
-
+    '''
     def sendDiagnostics(self, level, msg_text):
         msg = diagnostic_msgs.msg.DiagnosticArray()
         status = diagnostic_msgs.msg.DiagnosticStatus()
@@ -826,3 +828,4 @@ class SerialClient(object):
         status.values[1].value=time.ctime(self.lastsync_lost.to_sec())
 
         self.pub_diagnostics.publish(msg)
+    '''
