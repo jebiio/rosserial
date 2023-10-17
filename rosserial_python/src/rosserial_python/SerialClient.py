@@ -449,7 +449,94 @@ class SerialClient(object):
         except Exception as e:
             raise IOError("Serial Port read failure: %s" % e)
 
-    def run(self):
+def run(self):
+        """ Forward received messages to appropriate publisher. """
+
+        # Launch write thread.
+        if self.write_thread is None:
+            self.write_thread = threading.Thread(target=self.processWriteQueue)
+            self.write_thread.daemon = True
+            self.write_thread.start()
+
+        # Handle reading.
+        data = ''
+        read_step = None
+        while self.write_thread.is_alive() and not rospy.is_shutdown():
+            # This try-block is here because we make multiple calls to read(). Any one of them can throw
+            # an IOError if there's a serial problem or timeout. In that scenario, a single handler at the
+            # bottom attempts to reconfigure the topics.
+            try:
+                with self.read_lock:
+                    if self.port.inWaiting() < 1:
+                        time.sleep(0.001)
+                        continue
+                try:
+                    packet = self.tryRead(34)
+                    print('packet :', packet)
+                except IOError:
+                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
+                    rospy.loginfo("Packet Failed :  Failed to read msg data")
+                    raise
+            except IOError as exc:
+                rospy.logwarn('read step error')
+                # One of the read calls had an issue. Just to be safe, request that the client
+                # reinitialize their topics.
+                with self.read_lock:
+                    self.port.flushInput()
+                with self.write_lock:
+                    self.port.flushOutput()
+        self.write_thread.join()
+        '''    
+                # 읽어온거 header 확인하기... 
+                # Find sync flag.
+                
+                # Read topic id (2 bytes)
+                read_step = 'topic id'
+                topic_id_header = self.tryRead(2)
+                topic_id, = struct.unpack("<H", topic_id_header)
+
+                # Read serialized message data.
+                read_step = 'data'
+                try:
+                    msg = self.tryRead(msg_length)
+                except IOError:
+                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
+                    rospy.loginfo("Packet Failed :  Failed to read msg data")
+                    rospy.loginfo("expected msg length is %d", msg_length)
+                    raise
+
+                # Reada checksum for topic id and msg
+                read_step = 'data checksum'
+                chk = self.tryRead(1)
+                checksum = sum(array.array('B', topic_id_header + msg + chk))
+
+                # Validate checksum.
+                if checksum % 256 == 255:
+                    self.synced = True
+                    self.lastsync_success = rospy.Time.now()
+                    try:
+                        #self.callbacks[topic_id](msg) 여기서 읽은 data를 publish하기!!!!
+                    except KeyError:
+                        rospy.logerr("Tried to publish before configured, topic id %d" % topic_id)
+                        #self.requestTopics()
+                    time.sleep(0.001)
+                else:
+                    rospy.loginfo("wrong checksum for topic id and msg")
+
+            except IOError as exc:
+                rospy.logwarn('Last read step: %s' % read_step)
+                rospy.logwarn('Run loop error: %s' % exc)
+                # One of the read calls had an issue. Just to be safe, request that the client
+                # reinitialize their topics.
+                with self.read_lock:
+                    self.port.flushInput()
+                with self.write_lock:
+                    self.port.flushOutput()
+                #self.requestTopics()
+        self.write_thread.join()
+        '''
+
+    def run_old(self):
         """ Forward received messages to appropriate publisher. """
 
         # Launch write thread.
@@ -778,7 +865,34 @@ class SerialClient(object):
             self._write(self.header + self.protocol_ver + length_bytes + length_checksum_bytes + topic_bytes + msg_bytes + msg_checksum_bytes)
             return length
 
-    def processWriteQueue(self):
+def processWriteQueue(self):
+        """
+        Main loop for the thread that processes outgoing data to write to the serial port.
+        """
+        # main loop으로 serial에 실제로 쓰기 작업
+        while not rospy.is_shutdown():
+            if self.write_queue.empty():
+                time.sleep(0.01)
+            else:
+                data = self.write_queue.get()
+                while True:
+                    try:
+                        # if isinstance(data, tuple): # topic과 msg를 serial에 write하기
+                        #     topic, msg = data
+                        #     self._send(topic, msg)
+                        # elif isinstance(data, bytes): # data를 serial에 write
+                        self._write(data)
+                        else:
+                            rospy.logerr("Trying to write invalid data type: %s" % type(data))
+                        break
+                    except SerialTimeoutException as exc:
+                        rospy.logerr('Write timeout: %s' % exc)
+                        time.sleep(1)
+                    except RuntimeError as exc:
+                        rospy.logerr('Write thread exception: %s' % exc)
+                        break
+
+    def processWriteQueue_old(self):
         """
         Main loop for the thread that processes outgoing data to write to the serial port.
         """
