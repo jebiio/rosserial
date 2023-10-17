@@ -50,7 +50,7 @@ from serial import Serial, SerialException, SerialTimeoutException
 import roslib
 import rospy
 from std_msgs.msg import Time
-from rosserial_msgs.msg import TopicInfo, Log
+from rosserial_msgs.msg import TopicInfo, Log, FromCooperation, ToCooperation
 from rosserial_msgs.srv import RequestParamRequest, RequestParamResponse
 
 import diagnostic_msgs.msg
@@ -333,6 +333,9 @@ class SerialClient(object):
     protocol_ver2 = b'\xfe'
     protocol_ver = protocol_ver2
 
+    def tocooperation_callback(self, data):
+        print('To_Cooperation received')
+
     def __init__(self, port=None, baud=57600, timeout=5.0, fix_pyserial_for_test=False):
         """ Initialize node, connect to bus, attempt to negotiate topics. """
 
@@ -350,6 +353,9 @@ class SerialClient(object):
         self.timeout = timeout
         self.synced = False
         self.fix_pyserial_for_test = fix_pyserial_for_test
+
+        self.pub = rospy.Publisher('/kriso/from_cooperation', FromCooperation, queue_size=10)
+        self.sub = rospy.Subscriber('/kriso/to_cooperation', ToCooperation, self.tocooperation_callback)
 
         self.publishers = dict()  # id:Publishers
         self.subscribers = dict() # topic:Subscriber
@@ -449,7 +455,7 @@ class SerialClient(object):
         except Exception as e:
             raise IOError("Serial Port read failure: %s" % e)
 
-def run(self):
+    def run(self):
         """ Forward received messages to appropriate publisher. """
 
         # Launch write thread.
@@ -485,169 +491,6 @@ def run(self):
                     self.port.flushInput()
                 with self.write_lock:
                     self.port.flushOutput()
-        self.write_thread.join()
-        '''    
-                # 읽어온거 header 확인하기... 
-                # Find sync flag.
-                
-                # Read topic id (2 bytes)
-                read_step = 'topic id'
-                topic_id_header = self.tryRead(2)
-                topic_id, = struct.unpack("<H", topic_id_header)
-
-                # Read serialized message data.
-                read_step = 'data'
-                try:
-                    msg = self.tryRead(msg_length)
-                except IOError:
-                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
-                    rospy.loginfo("Packet Failed :  Failed to read msg data")
-                    rospy.loginfo("expected msg length is %d", msg_length)
-                    raise
-
-                # Reada checksum for topic id and msg
-                read_step = 'data checksum'
-                chk = self.tryRead(1)
-                checksum = sum(array.array('B', topic_id_header + msg + chk))
-
-                # Validate checksum.
-                if checksum % 256 == 255:
-                    self.synced = True
-                    self.lastsync_success = rospy.Time.now()
-                    try:
-                        #self.callbacks[topic_id](msg) 여기서 읽은 data를 publish하기!!!!
-                    except KeyError:
-                        rospy.logerr("Tried to publish before configured, topic id %d" % topic_id)
-                        #self.requestTopics()
-                    time.sleep(0.001)
-                else:
-                    rospy.loginfo("wrong checksum for topic id and msg")
-
-            except IOError as exc:
-                rospy.logwarn('Last read step: %s' % read_step)
-                rospy.logwarn('Run loop error: %s' % exc)
-                # One of the read calls had an issue. Just to be safe, request that the client
-                # reinitialize their topics.
-                with self.read_lock:
-                    self.port.flushInput()
-                with self.write_lock:
-                    self.port.flushOutput()
-                #self.requestTopics()
-        self.write_thread.join()
-        '''
-
-    def run_old(self):
-        """ Forward received messages to appropriate publisher. """
-
-        # Launch write thread.
-        if self.write_thread is None:
-            self.write_thread = threading.Thread(target=self.processWriteQueue)
-            self.write_thread.daemon = True
-            self.write_thread.start()
-
-        # Handle reading.
-        data = ''
-        read_step = None
-        while self.write_thread.is_alive() and not rospy.is_shutdown():
-            '''
-            if (rospy.Time.now() - self.lastsync).to_sec() > (self.timeout * 3):
-                if self.synced:
-                    rospy.logerr("Lost sync with device, restarting...")
-                else:
-                    rospy.logerr("Unable to sync with device; possible link problem or link software version mismatch such as hydro rosserial_python with groovy Arduino")
-                self.lastsync_lost = rospy.Time.now()
-                self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_NO_SYNC)
-                self.requestTopics()
-                self.lastsync = rospy.Time.now()
-            '''
-            # This try-block is here because we make multiple calls to read(). Any one of them can throw
-            # an IOError if there's a serial problem or timeout. In that scenario, a single handler at the
-            # bottom attempts to reconfigure the topics.
-            try:
-                with self.read_lock:
-                    if self.port.inWaiting() < 1:
-                        time.sleep(0.001)
-                        continue
-
-                # 읽어온거 header 확인하기... 
-                # Find sync flag.
-                flag = [0, 0]
-                read_step = 'syncflag'
-                flag[0] = self.tryRead(1)
-                if (flag[0] != self.header):
-                    continue
-
-                # Find protocol version.
-                read_step = 'protocol'
-                flag[1] = self.tryRead(1)
-                if flag[1] != self.protocol_ver:
-                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_MISMATCHED_PROTOCOL)
-                    rospy.logerr("Mismatched protocol version in packet (%s): lost sync or rosserial_python is from different ros release than the rosserial client" % repr(flag[1]))
-                    protocol_ver_msgs = {
-                            self.protocol_ver1: 'Rev 0 (rosserial 0.4 and earlier)',
-                            self.protocol_ver2: 'Rev 1 (rosserial 0.5+)',
-                            b'\xfd': 'Some future rosserial version'
-                    }
-                    if flag[1] in protocol_ver_msgs:
-                        found_ver_msg = 'Protocol version of client is ' + protocol_ver_msgs[flag[1]]
-                    else:
-                        found_ver_msg = "Protocol version of client is unrecognized"
-                    rospy.loginfo("%s, expected %s" % (found_ver_msg, protocol_ver_msgs[self.protocol_ver]))
-                    continue
-
-                # Read message length, checksum (3 bytes)
-                read_step = 'message length'
-                msg_len_bytes = self.tryRead(3)
-                msg_length, _ = struct.unpack("<hB", msg_len_bytes)
-
-                # Validate message length checksum.
-                if sum(array.array("B", msg_len_bytes)) % 256 != 255:
-                    rospy.loginfo("Wrong checksum for msg length, length %d, dropping message." % (msg_length))
-                    continue
-
-                # Read topic id (2 bytes)
-                read_step = 'topic id'
-                topic_id_header = self.tryRead(2)
-                topic_id, = struct.unpack("<H", topic_id_header)
-
-                # Read serialized message data.
-                read_step = 'data'
-                try:
-                    msg = self.tryRead(msg_length)
-                except IOError:
-                    # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
-                    rospy.loginfo("Packet Failed :  Failed to read msg data")
-                    rospy.loginfo("expected msg length is %d", msg_length)
-                    raise
-
-                # Reada checksum for topic id and msg
-                read_step = 'data checksum'
-                chk = self.tryRead(1)
-                checksum = sum(array.array('B', topic_id_header + msg + chk))
-
-                # Validate checksum.
-                if checksum % 256 == 255:
-                    self.synced = True
-                    self.lastsync_success = rospy.Time.now()
-                    try:
-                        #self.callbacks[topic_id](msg) 여기서 읽은 data를 publish하기!!!!
-                    except KeyError:
-                        rospy.logerr("Tried to publish before configured, topic id %d" % topic_id)
-                        #self.requestTopics()
-                    time.sleep(0.001)
-                else:
-                    rospy.loginfo("wrong checksum for topic id and msg")
-
-            except IOError as exc:
-                rospy.logwarn('Last read step: %s' % read_step)
-                rospy.logwarn('Run loop error: %s' % exc)
-                # One of the read calls had an issue. Just to be safe, request that the client
-                # reinitialize their topics.
-                with self.read_lock:
-                    self.port.flushInput()
-                with self.write_lock:
-                    self.port.flushOutput()
-                #self.requestTopics()
         self.write_thread.join()
 
     def setPublishSize(self, size):
@@ -693,143 +536,7 @@ def run(self):
                 rospy.loginfo("Change the message type of subscriber on %s from [%s] to [%s]" % (msg.topic_name, old_message_type, msg.message_type) )
         except Exception as e:
             rospy.logerr("Creation of subscriber failed: %s", e)
-'''
-    def setupServiceServerPublisher(self, data):
-        """ Register a new service server. """
-        try:
-            msg = TopicInfo()
-            msg.deserialize(data)
-            self.setPublishSize(msg.buffer_size)
-            try:
-                srv = self.services[msg.topic_name]
-            except KeyError:
-                srv = ServiceServer(msg, self)
-                rospy.loginfo("Setup service server on %s [%s]" % (msg.topic_name, msg.message_type) )
-                self.services[msg.topic_name] = srv
-            if srv.mres._md5sum == msg.md5sum:
-                self.callbacks[msg.topic_id] = srv.handlePacket
-            else:
-                raise Exception('Checksum does not match: ' + srv.mres._md5sum + ',' + msg.md5sum)
-        except Exception as e:
-            rospy.logerr("Creation of service server failed: %s", e)
 
-    def setupServiceServerSubscriber(self, data):
-        """ Register a new service server. """
-        try:
-            msg = TopicInfo()
-            msg.deserialize(data)
-            self.setSubscribeSize(msg.buffer_size)
-            try:
-                srv = self.services[msg.topic_name]
-            except KeyError:
-                srv = ServiceServer(msg, self)
-                rospy.loginfo("Setup service server on %s [%s]" % (msg.topic_name, msg.message_type) )
-                self.services[msg.topic_name] = srv
-            if srv.mreq._md5sum == msg.md5sum:
-                srv.id = msg.topic_id
-            else:
-                raise Exception('Checksum does not match: ' + srv.mreq._md5sum + ',' + msg.md5sum)
-        except Exception as e:
-            rospy.logerr("Creation of service server failed: %s", e)
-
-    def setupServiceClientPublisher(self, data):
-        """ Register a new service client. """
-        try:
-            msg = TopicInfo()
-            msg.deserialize(data)
-            self.setPublishSize(msg.buffer_size)
-            try:
-                srv = self.services[msg.topic_name]
-            except KeyError:
-                srv = ServiceClient(msg, self)
-                rospy.loginfo("Setup service client on %s [%s]" % (msg.topic_name, msg.message_type) )
-                self.services[msg.topic_name] = srv
-            if srv.mreq._md5sum == msg.md5sum:
-                self.callbacks[msg.topic_id] = srv.handlePacket
-            else:
-                raise Exception('Checksum does not match: ' + srv.mreq._md5sum + ',' + msg.md5sum)
-        except Exception as e:
-            rospy.logerr("Creation of service client failed: %s", e)
-
-    def setupServiceClientSubscriber(self, data):
-        """ Register a new service client. """
-        try:
-            msg = TopicInfo()
-            msg.deserialize(data)
-            self.setSubscribeSize(msg.buffer_size)
-            try:
-                srv = self.services[msg.topic_name]
-            except KeyError:
-                srv = ServiceClient(msg, self)
-                rospy.loginfo("Setup service client on %s [%s]" % (msg.topic_name, msg.message_type) )
-                self.services[msg.topic_name] = srv
-            if srv.mres._md5sum == msg.md5sum:
-                srv.id = msg.topic_id
-            else:
-                raise Exception('Checksum does not match: ' + srv.mres._md5sum + ',' + msg.md5sum)
-        except Exception as e:
-            rospy.logerr("Creation of service client failed: %s", e)
-
-    def handleTimeRequest(self, data):
-        """ Respond to device with system time. """
-        t = Time()
-        t.data = rospy.Time.now()
-        data_buffer = io.BytesIO()
-        t.serialize(data_buffer)
-        self.send( TopicInfo.ID_TIME, data_buffer.getvalue() )
-        self.lastsync = rospy.Time.now()
-
-    def handleParameterRequest(self, data):
-        """ Send parameters to device. Supports only simple datatypes and arrays of such. """
-        req = RequestParamRequest()
-        req.deserialize(data)
-        resp = RequestParamResponse()
-        try:
-            param = rospy.get_param(req.name)
-        except KeyError:
-            rospy.logerr("Parameter %s does not exist"%req.name)
-            return
-
-        if param is None:
-            rospy.logerr("Parameter %s does not exist"%req.name)
-            return
-
-        if isinstance(param, dict):
-            rospy.logerr("Cannot send param %s because it is a dictionary"%req.name)
-            return
-        if not isinstance(param, list):
-            param = [param]
-        #check to make sure that all parameters in list are same type
-        t = type(param[0])
-        for p in param:
-            if t!= type(p):
-                rospy.logerr('All Paramers in the list %s must be of the same type'%req.name)
-                return
-        if t == int or t == bool:
-            resp.ints = param
-        if t == float:
-            resp.floats =param
-        if t == str:
-            resp.strings = param
-        data_buffer = io.BytesIO()
-        resp.serialize(data_buffer)
-        self.send(TopicInfo.ID_PARAMETER_REQUEST, data_buffer.getvalue())
-
-    def handleLoggingRequest(self, data):
-        """ Forward logging information from serial device into ROS. """
-        msg = Log()
-        msg.deserialize(data)
-        if msg.level == Log.ROSDEBUG:
-            rospy.logdebug(msg.msg)
-        elif msg.level == Log.INFO:
-            rospy.loginfo(msg.msg)
-        elif msg.level == Log.WARN:
-            rospy.logwarn(msg.msg)
-        elif msg.level == Log.ERROR:
-            rospy.logerr(msg.msg)
-        elif msg.level == Log.FATAL:
-            rospy.logfatal(msg.msg)
-'''
     def send(self, topic, msg): # serial에 전송할 data를 queue에 넣기 
         """
         Queues data to be written to the serial port.
@@ -865,7 +572,7 @@ def run(self):
             self._write(self.header + self.protocol_ver + length_bytes + length_checksum_bytes + topic_bytes + msg_bytes + msg_checksum_bytes)
             return length
 
-def processWriteQueue(self):
+    def processWriteQueue(self):
         """
         Main loop for the thread that processes outgoing data to write to the serial port.
         """
@@ -882,8 +589,8 @@ def processWriteQueue(self):
                         #     self._send(topic, msg)
                         # elif isinstance(data, bytes): # data를 serial에 write
                         self._write(data)
-                        else:
-                            rospy.logerr("Trying to write invalid data type: %s" % type(data))
+                        # else:
+                        #     rospy.logerr("Trying to write invalid data type: %s" % type(data))
                         break
                     except SerialTimeoutException as exc:
                         rospy.logerr('Write timeout: %s' % exc)
@@ -891,55 +598,3 @@ def processWriteQueue(self):
                     except RuntimeError as exc:
                         rospy.logerr('Write thread exception: %s' % exc)
                         break
-
-    def processWriteQueue_old(self):
-        """
-        Main loop for the thread that processes outgoing data to write to the serial port.
-        """
-        # main loop으로 serial에 실제로 쓰기 작업
-        while not rospy.is_shutdown():
-            if self.write_queue.empty():
-                time.sleep(0.01)
-            else:
-                data = self.write_queue.get()
-                while True:
-                    try:
-                        if isinstance(data, tuple): # topic과 msg를 serial에 write하기
-                            topic, msg = data
-                            self._send(topic, msg)
-                        elif isinstance(data, bytes): # data를 serial에 write
-                            self._write(data)
-                        else:
-                            rospy.logerr("Trying to write invalid data type: %s" % type(data))
-                        break
-                    except SerialTimeoutException as exc:
-                        rospy.logerr('Write timeout: %s' % exc)
-                        time.sleep(1)
-                    except RuntimeError as exc:
-                        rospy.logerr('Write thread exception: %s' % exc)
-                        break
-
-    '''
-    def sendDiagnostics(self, level, msg_text):
-        msg = diagnostic_msgs.msg.DiagnosticArray()
-        status = diagnostic_msgs.msg.DiagnosticStatus()
-        status.name = "rosserial_python"
-        msg.header.stamp = rospy.Time.now()
-        msg.status.append(status)
-
-        status.message = msg_text
-        status.level = level
-
-        status.values.append(diagnostic_msgs.msg.KeyValue())
-        status.values[0].key="last sync"
-        if self.lastsync.to_sec()>0:
-            status.values[0].value=time.ctime(self.lastsync.to_sec())
-        else:
-            status.values[0].value="never"
-
-        status.values.append(diagnostic_msgs.msg.KeyValue())
-        status.values[1].key="last sync lost"
-        status.values[1].value=time.ctime(self.lastsync_lost.to_sec())
-
-        self.pub_diagnostics.publish(msg)
-    '''
