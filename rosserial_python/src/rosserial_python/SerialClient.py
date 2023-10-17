@@ -50,7 +50,10 @@ from serial import Serial, SerialException, SerialTimeoutException
 import roslib
 import rospy
 from std_msgs.msg import Time
-from rosserial_msgs.msg import TopicInfo, Log, FromCooperation, ToCooperation
+from rosserial_msgs.msg import TopicInfo, Log
+from rosserial_msgs.msg import FromCooperation as FromCooperation
+from rosserial_msgs.msg import ToCooperation as ToCooperation
+
 from rosserial_msgs.srv import RequestParamRequest, RequestParamResponse
 
 import diagnostic_msgs.msg
@@ -354,13 +357,14 @@ class SerialClient(object):
         self.synced = False
         self.fix_pyserial_for_test = fix_pyserial_for_test
 
-        self.pub = rospy.Publisher('/kriso/from_cooperation', FromCooperation, queue_size=10)
-        self.sub = rospy.Subscriber('/kriso/to_cooperation', ToCooperation, self.tocooperation_callback)
-
         self.publishers = dict()  # id:Publishers
         self.subscribers = dict() # topic:Subscriber
         self.services = dict()    # topic:Service
         
+        self.pub = rospy.Publisher('/kriso/from_cooperation', FromCooperation, queue_size=10)
+        self.sub = rospy.Subscriber('/kriso/to_cooperation', ToCooperation, self.tocooperation_callback)
+        
+
         def shutdown():
             self.txStopRequest()
             rospy.loginfo('shutdown hook activated')
@@ -432,7 +436,7 @@ class SerialClient(object):
             with self.read_lock:
                 self.port.flushInput()
 
-        self.write_queue.put(self.header + self.protocol_ver + b"\x00\x00\xff\x0b\x00\xf4")
+        # self.write_queue.put(self.header + self.protocol_ver + b"\x00\x00\xff\x0b\x00\xf4")
         rospy.loginfo("Sending tx stop request")
 
     def tryRead(self, length):
@@ -477,8 +481,15 @@ class SerialClient(object):
                         time.sleep(0.001)
                         continue
                 try:
-                    packet = self.tryRead(34)
-                    print('packet :', packet)
+                    msg = FromCooperation()
+                    msg.id = 0
+                    msg.lenght = 34
+                     
+                    msg.packet = self.tryRead(34) # packet = self.tryRead(34)                   
+                    
+                    # print('packet : ', len(msg.packet), '  ', msg.packet)
+            
+                    self.pub.publish(msg)
                 except IOError:
                     # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
                     rospy.loginfo("Packet Failed :  Failed to read msg data")
