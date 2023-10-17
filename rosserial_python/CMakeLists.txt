@@ -7,6 +7,6 @@ catkin_package()
 catkin_python_setup()
 
 catkin_install_python(
-  PROGRAMS nodes/message_info_service.py nodes/serial_node.py
+  PROGRAMS nodes/message_info_service.py nodes/serial_node.py tool/tocop_test.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

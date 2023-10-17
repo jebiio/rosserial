@@ -337,7 +337,9 @@ class SerialClient(object):
     protocol_ver = protocol_ver2
 
     def tocooperation_callback(self, data):
-        print('To_Cooperation received')
+        print('data :', data.id, data.length, data.packet)
+        self.write_queue.put(data.packet)
+        # print('To_Cooperation received')
 
     def __init__(self, port=None, baud=57600, timeout=5.0, fix_pyserial_for_test=False):
         """ Initialize node, connect to bus, attempt to negotiate topics. """
@@ -483,7 +485,7 @@ class SerialClient(object):
                 try:
                     msg = FromCooperation()
                     msg.id = 0
-                    msg.lenght = 34
+                    msg.length = 34
                      
                     msg.packet = self.tryRead(34) # packet = self.tryRead(34)                   
                     
@@ -600,6 +602,7 @@ class SerialClient(object):
                         #     self._send(topic, msg)
                         # elif isinstance(data, bytes): # data를 serial에 write
                         self._write(data)
+                        print('write to serial!!!!!!!!')
                         # else:
                         #     rospy.logerr("Trying to write invalid data type: %s" % type(data))
                         break

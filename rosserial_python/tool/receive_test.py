@@ -1,6 +1,6 @@
 # struct.pack 참고 : https://docs.python.org/ko/3/library/struct.html
+# rosserial -> PC usb serial
 import sys
-from time import sleep
 import serial
 import struct
 
@@ -37,16 +37,9 @@ class IcdToMC:
         return struct.pack('<Qdffffffffffffffffff', self.timestamp, self.t_sec, self.delt_sec, self.delx_rps, self.dely_rps, self.qual, self.gx_rps, self.gy_rps, self.gz_rps, self.ax_mps2, self.ay_mps2, self.az_mps2, self.h_mtr, self.mx_gauss, self.my_gauss, self.mz_gauss, self.rsv0, self.rsv1, self.rsv2, self.rsv3)
 
     def updateValue(self):
-        self.timestamp=self.timestamp+1
-    def create_packet(self):
-        packet = bytearray(34)
-        packet[0] = 0xAA
-        packet[1] = 0x55
-        return packet
-
+        pass
 
 def main():
-    mc = IcdToMC()
     ser = serial.Serial()
 
     ser.port = '/dev/ttyUSB1' # 변경하시오
@@ -54,11 +47,10 @@ def main():
     ser.open()
 
     while(True):
-        in_bytes = ser.write(mc.create_packet())
-        # mc.updateValue()
-        print('write')
-        sleep(1)
-    
+        in_bytes = ser.read(63)
+        print('\nreceived : ', in_bytes)
+        # in_struct = struct.unpack('<Qdffffffffffffffffff', in_bytes)
+        # print(in_struct)
     ser.close()
 
 if __name__=="__main__":

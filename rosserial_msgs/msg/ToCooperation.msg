@@ -1,4 +1,4 @@
-# 64bytes
+# 63bytes
 uint32 id
-uint8 lenght
+uint8 length
 uint8[] packet
