@@ -6,7 +6,7 @@ Please see [rosserial on the ROS wiki](http://wiki.ros.org/rosserial) to get sta
 
 ## 실행
 ```bash
-rosrun rosserial_python serial_node.py _port:=/dev/ttyACM0 _baud:=115200
+rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=115200
 ```
 
 ## test
