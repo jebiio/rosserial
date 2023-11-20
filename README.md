@@ -6,8 +6,8 @@ Please see [rosserial on the ROS wiki](http://wiki.ros.org/rosserial) to get sta
 
 ## 실행
 ```bash
-roscore # roscore 실행
-rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=115200
+roscore
+rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=57600
 ```
 
 ## test

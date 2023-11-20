@@ -46,6 +46,8 @@ import threading
 import time
 
 from serial import Serial, SerialException, SerialTimeoutException
+from kriso_msgs.msg import FromCooperation as FromCooperation
+from kriso_msgs.msg import ToCooperation as ToCooperation
 
 import roslib
 import rospy
@@ -337,7 +339,7 @@ class SerialClient(object):
     protocol_ver = protocol_ver2
 
     def tocooperation_callback(self, data):
-        print('data :', data.id, data.length, data.packet)
+        print('To_Cooperation received')
         self.write_queue.put(data.packet)
         # print('To_Cooperation received')
 
@@ -362,10 +364,9 @@ class SerialClient(object):
         self.publishers = dict()  # id:Publishers
         self.subscribers = dict() # topic:Subscriber
         self.services = dict()    # topic:Service
-        
+
         self.pub = rospy.Publisher('/kriso/from_cooperation', FromCooperation, queue_size=10)
-        self.sub = rospy.Subscriber('/kriso/to_cooperation', ToCooperation, self.tocooperation_callback)
-        
+        self.sub = rospy.Subscriber('/kriso/to_cooperation', ToCooperation, self.tocooperation_callback)        
 
         def shutdown():
             self.txStopRequest()
@@ -430,7 +431,7 @@ class SerialClient(object):
                 self.port.flushInput()
 
         # request topic sync
-        self.write_queue.put(self.header + self.protocol_ver + b"\x00\x00\xff\x00\x00\xff")
+        # self.write_queue.put(self.header + self.protocol_ver + b"\x00\x00\xff\x00\x00\xff")
 
     def txStopRequest(self):
         """ Send stop tx request to client before the node exits. """
@@ -488,7 +489,7 @@ class SerialClient(object):
                     msg.length = 34
                      
                     msg.packet = self.tryRead(34) # packet = self.tryRead(34)                   
-                    
+                    rospy.loginfo('after read 34 bytes')
                     # print('packet : ', len(msg.packet), '  ', msg.packet)
             
                     self.pub.publish(msg)
