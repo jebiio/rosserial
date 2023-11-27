@@ -8,8 +8,6 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(FILES
   Log.msg
   TopicInfo.msg
-  FromCooperation.msg 
-  ToCooperation.msg 
 )
 
 add_service_files(FILES

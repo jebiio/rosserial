@@ -53,8 +53,6 @@ import roslib
 import rospy
 from std_msgs.msg import Time
 from rosserial_msgs.msg import TopicInfo, Log
-from rosserial_msgs.msg import FromCooperation as FromCooperation
-from rosserial_msgs.msg import ToCooperation as ToCooperation
 
 from rosserial_msgs.srv import RequestParamRequest, RequestParamResponse
 
