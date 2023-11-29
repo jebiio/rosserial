@@ -362,6 +362,7 @@ class SerialClient(object):
         self.publishers = dict()  # id:Publishers
         self.subscribers = dict() # topic:Subscriber
         self.services = dict()    # topic:Service
+        self.search_buffer = bytearray(34)
 
         self.pub = rospy.Publisher('/kriso/from_cooperation', FromCooperation, queue_size=10)
         self.sub = rospy.Subscriber('/kriso/to_cooperation', ToCooperation, self.tocooperation_callback)        
@@ -485,10 +486,18 @@ class SerialClient(object):
                     msg = FromCooperation()
                     msg.id = 0
                     msg.length = 34
-                     
-                    msg.packet = self.tryRead(34) # packet = self.tryRead(34)                   
+                    buf = self.tryRead(34)
+                    index_a = -1
+                    if 0xAA in buf :
+                        index_a = buf.index(0xAA)
+                        self.tryRead(index_a)
+                        if index_a != 0:
+                            continue
+                        # reset 됨!!!
+                        
+                    msg.packet = buf #self.tryRead(34) # packet = self.tryRead(34)                   
                     rospy.loginfo('after read 34 bytes') # KRISO 디버깅 
-                    # print('packet : ', len(msg.packet), '  ', msg.packet) # KRISO 디버깅 
+                    print('packet : ', len(msg.packet), '  ', msg.packet) # KRISO 디버깅 
                     self.pub.publish(msg)
                 except IOError:
                     # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
