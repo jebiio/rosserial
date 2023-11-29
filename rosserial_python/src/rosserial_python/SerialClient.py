@@ -487,9 +487,8 @@ class SerialClient(object):
                     msg.length = 34
                      
                     msg.packet = self.tryRead(34) # packet = self.tryRead(34)                   
-                    rospy.loginfo('after read 34 bytes')
-                    # print('packet : ', len(msg.packet), '  ', msg.packet)
-            
+                    rospy.loginfo('after read 34 bytes') # KRISO 디버깅 
+                    # print('packet : ', len(msg.packet), '  ', msg.packet) # KRISO 디버깅 
                     self.pub.publish(msg)
                 except IOError:
                     # self.sendDiagnostics(diagnostic_msgs.msg.DiagnosticStatus.ERROR, ERROR_PACKET_FAILED)
